@@ -14,37 +14,101 @@ class ReviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Game Review')),
+      appBar: AppBar(
+        title: const Text('Game Review'),
+      ),
       body: history.isEmpty
-          ? const Center(child: Text('No moves to review'))
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: history.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final m = history[index];
-                return ListTile(
-                  leading: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
-                    child: Text(
-                      '${m.moveNumber}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ? Center(
+              child: Text(
+                'No moves were played.',
+                style: GoogleFonts.inter(fontSize: 16),
+              ),
+            )
+          : Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  color: theme.colorScheme.primary.withOpacity(0.08),
+                  child: Text(
+                    '${history.length} moves',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
                     ),
                   ),
-                  title: Text(
-                    m.san,
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: history.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final m = history[index];
+                      final isWhite = m.isWhiteMove;
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          radius: 15,
+                          backgroundColor: theme.colorScheme.primary.withOpacity(0.12),
+                          child: Text(
+                            '${m.moveNumber}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          isWhite ? '${m.moveNumber}. ${m.san}' : m.san,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        subtitle: Text('${m.from} → ${m.to}'),
+                        trailing: m.isCheckmate
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Mate',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              )
+                            : m.isCheck
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'Check',
+                                      style: TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                      );
+                    },
                   ),
-                  subtitle: Text('${m.from} → ${m.to}'),
-                  trailing: m.isCheckmate
-                      ? const Text('mate', style: TextStyle(color: Colors.red))
-                      : m.isCheck
-                          ? const Text('check', style: TextStyle(color: Colors.orange))
-                          : null,
-                );
-              },
+                ),
+              ],
             ),
     );
   }
