@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:chess/chess.dart' as ch;
 import 'package:google_fonts/google_fonts.dart';
+
 import '../models/game_mode.dart';
 import '../models/move_record.dart';
 import '../services/bot_service.dart';
@@ -9,9 +11,10 @@ import '../services/variant_engine.dart';
 import '../widgets/chess_board.dart';
 import '../widgets/difficulty_selector.dart';
 import '../theme/board_themes.dart';
+import '../providers/settings_provider.dart';
 import 'review_screen.dart';
 
-class GameScreen extends StatefulWidget {
+class GameScreen extends ConsumerStatefulWidget {
   final GameMode mode;
   final bool vsBot;
   final BotDifficulty difficulty;
@@ -24,10 +27,10 @@ class GameScreen extends StatefulWidget {
   });
 
   @override
-  State<GameScreen> createState() => _GameScreenState();
+  ConsumerState<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends ConsumerState<GameScreen> {
   late ch.Chess game;
   String? selectedSquare;
   List<String> legalTargets = [];
@@ -112,16 +115,17 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _afterMove(String from, String to, String? promo) {
-    // Count checks for Three-Check
+    // Count checks for Three-Check mode
     if (game.in_check) {
       if (game.turn == ch.Color.BLACK) {
-        whiteChecks++; // White just moved and gave check
+        whiteChecks++;
       } else {
         blackChecks++;
       }
     }
 
     final san = game.getHistory().isNotEmpty ? game.getHistory().last : '$from$to';
+
     final record = MoveRecord(
       from: from,
       to: to,
@@ -140,14 +144,16 @@ class _GameScreenState extends State<GameScreen> {
     selectedSquare = null;
     legalTargets = [];
 
-    if (game.get(to) != null) {
+    // Sounds
+    final captured = game.get(to) != null;
+    if (captured) {
       sound.playCapture();
     } else {
       sound.playMove();
     }
     if (game.in_check) sound.playCheck();
 
-    // Check variant win conditions
+    // Variant win conditions
     final variantResult = VariantEngine.checkVariantWin(
       game,
       widget.mode,
@@ -172,6 +178,7 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
 
+    // Bot move
     if (widget.vsBot && game.turn == ch.Color.BLACK) {
       _makeBotMove();
     }
@@ -179,22 +186,29 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _makeBotMove() async {
     setState(() => botThinking = true);
-    await Future.delayed(Duration(milliseconds: 400 + (widget.difficulty.index * 150)));
+
+    // Thinking time depends on difficulty
+    final delay = 350 + (widget.difficulty.index * 180);
+    await Future.delayed(Duration(milliseconds: delay));
 
     final move = bot.getMove(game, widget.difficulty);
-    if (move != null) {
+    if (move != null && mounted) {
       final from = move['from']!;
       final to = move['to']!;
       game.move(move);
       _afterMove(from, to, move['promotion']);
     }
 
-    setState(() => botThinking = false);
+    if (mounted) {
+      setState(() => botThinking = false);
+    }
   }
 
   void _updateStatus() {
     if (game.in_checkmate) {
-      status = game.turn == ch.Color.WHITE ? 'Black wins by checkmate!' : 'White wins by checkmate!';
+      status = game.turn == ch.Color.WHITE
+          ? 'Black wins by checkmate!'
+          : 'White wins by checkmate!';
     } else if (game.in_stalemate) {
       status = 'Draw by stalemate';
     } else if (game.in_draw) {
@@ -205,9 +219,9 @@ class _GameScreenState extends State<GameScreen> {
       status = game.turn == ch.Color.WHITE ? 'White to move' : 'Black to move';
     }
 
-    // Show check counters for Three-Check
+    // Show check counter in Three-Check
     if (widget.mode.id == GameModeId.threeCheck) {
-      status += '  (✓ $whiteChecks-$blackChecks)';
+      status += '   ✓ $whiteChecks-$blackChecks';
     }
   }
 
@@ -216,7 +230,10 @@ class _GameScreenState extends State<GameScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: Text(status, style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+        title: Text(
+          status,
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+        ),
         content: const Text('What would you like to do?'),
         actions: [
           TextButton(
@@ -225,7 +242,10 @@ class _GameScreenState extends State<GameScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ReviewScreen(history: history, finalFen: game.fen),
+                  builder: (_) => ReviewScreen(
+                    history: history,
+                    finalFen: game.fen,
+                  ),
                 ),
               );
             },
@@ -253,6 +273,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final boardTheme = ref.watch(settingsProvider).boardTheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -260,34 +281,45 @@ class _GameScreenState extends State<GameScreen> {
         actions: [
           if (botThinking)
             const Padding(
-              padding: EdgeInsets.only(right: 12),
+              padding: EdgeInsets.only(right: 14),
               child: Center(
                 child: SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'New Game',
             onPressed: _newGame,
           ),
         ],
       ),
       body: Column(
         children: [
+          // Status bar
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
-            color: theme.colorScheme.primary.withOpacity(0.08),
+            color: theme.colorScheme.primary.withOpacity(0.09),
             child: Text(
               botThinking ? 'Bot is thinking...' : status,
               textAlign: TextAlign.center,
-              style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
+
           const Spacer(),
+
+          // Board
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: ChessBoard(
@@ -297,14 +329,19 @@ class _GameScreenState extends State<GameScreen> {
               lastFrom: lastFrom,
               lastTo: lastTo,
               onSquareTap: _onSquareTap,
-              boardTheme: BoardTheme.classic,
+              boardTheme: boardTheme,
             ),
           ),
+
           const Spacer(),
+
+          // Bottom info
           Padding(
-            padding: const EdgeInsets.only(bottom: 20),
+            padding: const EdgeInsets.only(bottom: 22),
             child: Text(
-              widget.vsBot ? 'vs Bot (${widget.difficulty.name})' : 'Local Game',
+              widget.vsBot
+                  ? 'vs Bot  •  ${widget.difficulty.name}'
+                  : 'Local Game',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: theme.colorScheme.onSurface.withOpacity(0.5),
