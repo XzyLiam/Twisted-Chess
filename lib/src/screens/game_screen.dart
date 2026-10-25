@@ -301,21 +301,58 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         ],
       ),
       body: Column(
-        children: [
-          // Status bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            color: theme.colorScheme.primary.withOpacity(0.09),
-            child: Text(
-              botThinking ? 'Bot is thinking...' : status,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+  children: [
+    // Status bar
+    Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      color: theme.colorScheme.primary.withOpacity(0.09),
+      child: Text(
+        botThinking ? 'Bot is thinking...' : status,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.inter(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+
+    // Move list
+    MoveList(moves: history),
+
+    const Spacer(),
+
+    // Board
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: ChessBoard(
+        game: game,
+        selectedSquare: selectedSquare,
+        legalTargets: legalTargets,
+        lastFrom: lastFrom,
+        lastTo: lastTo,
+        onSquareTap: _onSquareTap,
+        boardTheme: boardTheme,
+      ),
+    ),
+
+    const Spacer(),
+
+    // Bottom info
+    Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Text(
+        widget.vsBot
+            ? 'vs Bot  •  ${widget.difficulty.name}'
+            : 'Local Game',
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          color: theme.colorScheme.onSurface.withOpacity(0.5),
+        ),
+      ),
+    ),
+  ],
+),
 
           const Spacer(),
 
