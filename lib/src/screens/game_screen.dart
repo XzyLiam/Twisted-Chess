@@ -5,6 +5,7 @@ import '../models/game_mode.dart';
 import '../models/move_record.dart';
 import '../services/bot_service.dart';
 import '../services/sound_service.dart';
+import '../services/variant_engine.dart';
 import '../widgets/chess_board.dart';
 import '../widgets/difficulty_selector.dart';
 import '../theme/board_themes.dart';
@@ -37,6 +38,8 @@ class _GameScreenState extends State<GameScreen> {
   final SoundService sound = SoundService();
   bool botThinking = false;
   String status = 'White to move';
+  int whiteChecks = 0;
+  int blackChecks = 0;
 
   @override
   void initState() {
@@ -45,14 +48,16 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _newGame() {
-    game = ch.Chess();
-    // TODO: Apply special starting positions for variants later
+    final fen = VariantEngine.getStartingFen(widget.mode);
+    game = ch.Chess.fromFEN(fen);
     selectedSquare = null;
     legalTargets = [];
     lastFrom = null;
     lastTo = null;
     history.clear();
     botThinking = false;
+    whiteChecks = 0;
+    blackChecks = 0;
     status = 'White to move';
     setState(() {});
   }
@@ -68,7 +73,6 @@ class _GameScreenState extends State<GameScreen> {
         'to': square,
       };
 
-      // Auto-queen for simplicity
       final moving = game.get(selectedSquare!);
       if (moving != null &&
           moving.type == ch.PieceType.PAWN &&
@@ -82,7 +86,6 @@ class _GameScreenState extends State<GameScreen> {
         return;
       }
 
-      // Select another piece
       if (piece != null && piece.color == game.turn) {
         _select(square);
         return;
@@ -109,6 +112,15 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _afterMove(String from, String to, String? promo) {
+    // Count checks for Three-Check
+    if (game.in_check) {
+      if (game.turn == ch.Color.BLACK) {
+        whiteChecks++; // White just moved and gave check
+      } else {
+        blackChecks++;
+      }
+    }
+
     final san = game.getHistory().isNotEmpty ? game.getHistory().last : '$from$to';
     final record = MoveRecord(
       from: from,
@@ -116,11 +128,10 @@ class _GameScreenState extends State<GameScreen> {
       promotion: promo,
       san: san,
       fenAfter: game.fen,
-      isCapture: game.getHistory().isNotEmpty, // simplified
       isCheck: game.in_check,
       isCheckmate: game.in_checkmate,
       moveNumber: (history.length ~/ 2) + 1,
-      isWhiteMove: game.turn == ch.Color.BLACK, // turn already flipped
+      isWhiteMove: game.turn == ch.Color.BLACK,
     );
 
     history.add(record);
@@ -129,12 +140,28 @@ class _GameScreenState extends State<GameScreen> {
     selectedSquare = null;
     legalTargets = [];
 
-    if (record.isCapture) {
+    if (game.get(to) != null) {
       sound.playCapture();
     } else {
       sound.playMove();
     }
     if (game.in_check) sound.playCheck();
+
+    // Check variant win conditions
+    final variantResult = VariantEngine.checkVariantWin(
+      game,
+      widget.mode,
+      whiteChecks: whiteChecks,
+      blackChecks: blackChecks,
+    );
+
+    if (variantResult.isWin) {
+      status = '${variantResult.winner} wins! (${variantResult.reason})';
+      sound.playGameEnd();
+      setState(() {});
+      _showGameOver();
+      return;
+    }
 
     _updateStatus();
     setState(() {});
@@ -145,7 +172,6 @@ class _GameScreenState extends State<GameScreen> {
       return;
     }
 
-    // Bot move
     if (widget.vsBot && game.turn == ch.Color.BLACK) {
       _makeBotMove();
     }
@@ -153,7 +179,7 @@ class _GameScreenState extends State<GameScreen> {
 
   Future<void> _makeBotMove() async {
     setState(() => botThinking = true);
-    await Future.delayed(const Duration(milliseconds: 450));
+    await Future.delayed(Duration(milliseconds: 400 + (widget.difficulty.index * 150)));
 
     final move = bot.getMove(game, widget.difficulty);
     if (move != null) {
@@ -177,6 +203,11 @@ class _GameScreenState extends State<GameScreen> {
       status = game.turn == ch.Color.WHITE ? 'White is in check' : 'Black is in check';
     } else {
       status = game.turn == ch.Color.WHITE ? 'White to move' : 'Black to move';
+    }
+
+    // Show check counters for Three-Check
+    if (widget.mode.id == GameModeId.threeCheck) {
+      status += '  (✓ $whiteChecks-$blackChecks)';
     }
   }
 
@@ -241,7 +272,6 @@ class _GameScreenState extends State<GameScreen> {
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _newGame,
-            tooltip: 'New Game',
           ),
         ],
       ),
@@ -274,9 +304,7 @@ class _GameScreenState extends State<GameScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: Text(
-              widget.vsBot
-                  ? 'Bot: ${widget.difficulty.name}'
-                  : 'Local Game',
+              widget.vsBot ? 'vs Bot (${widget.difficulty.name})' : 'Local Game',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: theme.colorScheme.onSurface.withOpacity(0.5),
