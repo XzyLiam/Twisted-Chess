@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StorageService {
   static const _keySound = 'sound_enabled';
   static const _keyDarkMode = 'dark_mode';
+  static const _keyBoardTheme = 'board_theme';
   static const _keyPuzzleStreak = 'puzzle_streak';
   static const _keyLastPuzzleDate = 'last_puzzle_date';
 
@@ -24,6 +25,16 @@ class StorageService {
   Future<void> setDarkMode(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyDarkMode, value);
+  }
+
+  Future<String?> getBoardTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyBoardTheme);
+  }
+
+  Future<void> setBoardTheme(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyBoardTheme, id);
   }
 
   Future<int> getPuzzleStreak() async {
